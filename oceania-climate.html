@@ -1,0 +1,2448 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>From Emissions to Evacuations — Oceania Climate Report 2026</title>
+  <meta name="description"
+    content="An interactive data journalism story on climate change across 13 Pacific island nations." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;0,900;1,400&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --teal: #0a8c6e;
+      --sky: #2a9fd6;
+      --coral: #d45f3c;
+      --green: #2e9e72;
+      --ink: #111111;
+      --dim: #444444;
+      --muted: #888888;
+      --faint: #bbbbbb;
+      --bg: #fafaf8;
+      --alt: #f5f4f0;
+      --ocean: #dceef7;
+      --ease-cinematic: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg);
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      color: var(--ink);
+      line-height: 1.6;
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── SCROLL PROGRESS ─────────────────────────── */
+    #progress-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 2px;
+      width: 0%;
+      background: linear-gradient(90deg, var(--teal), var(--sky));
+      z-index: 9999;
+      transition: width 0.08s linear;
+    }
+
+    /* ── NAV DOTS ────────────────────────────────── */
+    #nav-dots {
+      position: fixed;
+      right: 22px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 999;
+    }
+
+    #nav-dots button {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--faint);
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      transition: background 0.4s var(--ease-cinematic),
+        transform 0.4s var(--ease-cinematic),
+        box-shadow 0.4s var(--ease-cinematic);
+    }
+
+    #nav-dots button.active {
+      background: var(--teal);
+      transform: scale(1.8);
+      box-shadow: 0 0 8px rgba(10, 140, 110, 0.25);
+    }
+
+    /* ── REVEAL ANIMATIONS ───────────────────────── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 1s var(--ease-cinematic),
+        transform 1s var(--ease-cinematic);
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* Direction variants */
+    .reveal.from-left {
+      transform: translateX(-28px);
+    }
+
+    .reveal.from-left.visible {
+      transform: none;
+    }
+
+    .reveal.from-right {
+      transform: translateX(28px);
+    }
+
+    .reveal.from-right.visible {
+      transform: none;
+    }
+
+    .reveal.scale-in {
+      transform: scale(0.95);
+    }
+
+    .reveal.scale-in.visible {
+      transform: none;
+    }
+
+    /* Stagger delays — cinematic pacing */
+    .reveal.d1 {
+      transition-delay: 0.15s;
+    }
+
+    .reveal.d2 {
+      transition-delay: 0.30s;
+    }
+
+    .reveal.d3 {
+      transition-delay: 0.45s;
+    }
+
+    .reveal.d4 {
+      transition-delay: 0.60s;
+    }
+
+    .reveal.d5 {
+      transition-delay: 0.75s;
+    }
+
+    .reveal.d6 {
+      transition-delay: 0.90s;
+    }
+
+    .reveal.d7 {
+      transition-delay: 1.05s;
+    }
+
+    .reveal.d8 {
+      transition-delay: 1.20s;
+    }
+
+    /* Slower reveal for chart wrappers */
+    .reveal.slow {
+      transition-duration: 1.4s;
+    }
+
+    /* ── EYEBROW ─────────────────────────────────── */
+    .eyebrow {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 18px;
+      display: block;
+    }
+
+    canvas {
+      display: block;
+      width: 100% !important;
+    }
+
+    /* ═══════════════════════════════════════════════
+   HERO
+═══════════════════════════════════════════════ */
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0 10vw;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    #hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: radial-gradient(ellipse at 20% 50%, rgba(10, 140, 110, 0.03) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 30%, rgba(42, 159, 214, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    #hero::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 120px;
+      background: linear-gradient(to bottom, transparent, var(--bg));
+      pointer-events: none;
+    }
+
+    /* Parallax floating text backdrop */
+    #hero-bg-word {
+      position: absolute;
+      right: -2vw;
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: 'Merriweather', serif;
+      font-size: clamp(120px, 16vw, 220px);
+      font-weight: 900;
+      font-style: italic;
+      color: transparent;
+      -webkit-text-stroke: 1px rgba(10, 140, 110, 0.05);
+      pointer-events: none;
+      user-select: none;
+      white-space: nowrap;
+      will-change: transform;
+      transition: transform 0.05s linear;
+    }
+
+    h1 {
+      font-family: 'Merriweather', Georgia, serif;
+      font-size: clamp(28px, 4.2vw, 58px);
+      font-weight: 900;
+      line-height: 1.1;
+      color: var(--ink);
+      max-width: 860px;
+      margin-bottom: 28px;
+      text-wrap: balance;
+      letter-spacing: -0.8px;
+    }
+
+    h1 em {
+      font-style: italic;
+      color: var(--teal);
+    }
+
+    .hero-intro {
+      font-family: 'Merriweather', Georgia, serif;
+      font-size: 17px;
+      font-weight: 400;
+      font-style: italic;
+      color: var(--dim);
+      max-width: 640px;
+      line-height: 1.75;
+      margin-bottom: 52px;
+    }
+
+    /* KPIs */
+    .kpi-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 64px;
+      row-gap: 28px;
+      margin-bottom: 56px;
+    }
+
+    .kpi {
+      position: relative;
+    }
+
+    .kpi::before {
+      content: '';
+      display: block;
+      width: 20px;
+      height: 2px;
+      background: var(--teal);
+      margin-bottom: 10px;
+      transition: width 0.6s var(--ease-cinematic);
+    }
+
+    .kpi.counted::before {
+      width: 36px;
+    }
+
+    .kpi-num {
+      font-family: 'Merriweather', Georgia, serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1;
+      display: block;
+      transition: color 0.3s;
+    }
+
+    .kpi.counted .kpi-num {
+      color: var(--teal);
+    }
+
+    .kpi-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--dim);
+      display: block;
+      margin-top: 5px;
+    }
+
+    .kpi-ctx {
+      font-size: 11px;
+      color: var(--muted);
+      display: block;
+      margin-top: 2px;
+    }
+
+    /* Lede facts */
+    .lede-facts {
+      list-style: none;
+      max-width: 580px;
+      margin-bottom: 52px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .lede-facts li {
+      font-size: 15px;
+      color: var(--dim);
+      line-height: 1.7;
+      padding-left: 16px;
+      position: relative;
+    }
+
+    .lede-facts li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 5px;
+      height: 1px;
+      background: var(--teal);
+    }
+
+    /* Scroll cue */
+    .scroll-cue {
+      position: absolute;
+      bottom: 40px;
+      left: 10vw;
+      font-size: 10.5px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 1;
+      transition: opacity 0.6s;
+    }
+
+    .scroll-cue.hidden {
+      opacity: 0;
+    }
+
+    .scroll-cue svg {
+      opacity: 0.5;
+      animation: nudge 2.5s ease-in-out infinite;
+    }
+
+    @keyframes nudge {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(6px);
+      }
+    }
+
+    /* ═══════════════════════════════════════════════
+   SHARED SECTION CHROME — BORDERLESS
+═══════════════════════════════════════════════ */
+    .act {
+      padding: 120px 10vw;
+      position: relative;
+    }
+
+    .act+.act {
+      padding-top: 100px;
+    }
+
+    /* Gradient divider between sections */
+    .act::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 12%;
+      right: 12%;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.05) 30%, rgba(0, 0, 0, 0.05) 70%, transparent);
+      pointer-events: none;
+    }
+
+    .act:first-of-type::before {
+      display: none;
+    }
+
+    .act-alt {
+      background: var(--alt);
+    }
+
+    /* Subtle depth gradient for alt sections */
+    .act-alt::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 80px;
+      background: linear-gradient(to bottom, var(--bg), var(--alt));
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .act-alt>* {
+      position: relative;
+      z-index: 1;
+    }
+
+    @media (max-width: 768px) {
+      .act {
+        padding: 72px 6vw;
+      }
+    }
+
+    h2 {
+      font-family: 'Merriweather', Georgia, serif;
+      font-size: clamp(20px, 2.8vw, 34px);
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 10px;
+      text-wrap: balance;
+      line-height: 1.22;
+      max-width: 720px;
+      letter-spacing: -0.3px;
+    }
+
+    .section-lede {
+      font-size: 15px;
+      color: var(--dim);
+      line-height: 1.85;
+      max-width: 600px;
+      margin-bottom: 48px;
+      font-weight: 300;
+    }
+
+    /* Chart chrome — borderless */
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .chart-source {
+      font-size: 10px;
+      color: var(--faint);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .chart-unit {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    /* Inline annotation — left-ruled, no card */
+    .insight {
+      margin-bottom: 28px;
+      padding-left: 14px;
+      border-left: 2px solid var(--teal);
+      font-size: 14px;
+      color: var(--dim);
+      line-height: 1.65;
+      max-width: 620px;
+      transition: border-color 0.5s var(--ease-cinematic),
+        opacity 0.8s var(--ease-cinematic);
+    }
+
+    .insight.annotation-hidden {
+      opacity: 0;
+    }
+
+    .insight.annotation-visible {
+      opacity: 1;
+    }
+
+    .insight strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+
+    .insight em {
+      font-style: italic;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* ═══════════════════════════════════════════════
+   EMISSION TREND SECTION — SIDE-BY-SIDE
+═══════════════════════════════════════════════ */
+    .emission-layout {
+      display: grid;
+      grid-template-columns: 1fr 1.3fr;
+      gap: 56px;
+      align-items: start;
+    }
+
+    .emission-layout .emission-intro {
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 900px) {
+      .emission-layout {
+        grid-template-columns: 1fr;
+        gap: 36px;
+      }
+    }
+
+    /* ═══════════════════════════════════════════════
+   SEA LEVEL — FULL WIDTH IMMERSIVE
+═══════════════════════════════════════════════ */
+    .sea-level-full {
+      max-width: 100%;
+    }
+
+    /* Scroll progress indicator for sea level */
+    .sea-scroll-hint {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      opacity: 0;
+      transition: opacity 0.6s;
+    }
+
+    .sea-scroll-hint.show {
+      opacity: 1;
+    }
+
+    /* ═══════════════════════════════════════════════
+   MAP
+═══════════════════════════════════════════════ */
+    #map-section {
+      background: var(--bg);
+    }
+
+    .filter-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--teal);
+      margin-bottom: 10px;
+    }
+
+    .filter-tag .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .filter-tag button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      margin-left: 2px;
+      opacity: 0.7;
+      transition: opacity 0.15s;
+    }
+
+    .filter-tag button:hover {
+      opacity: 1;
+    }
+
+    .map-instruction {
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-bottom: 14px;
+      letter-spacing: 0.2px;
+    }
+
+    #pacific-map-wrap {
+      position: relative;
+    }
+
+    #pacific-map {
+      width: 100%;
+      height: auto;
+      display: block;
+      cursor: default;
+      background: transparent;
+    }
+
+    /* D3 land paths */
+    #pacific-map path.land {
+      transition: fill 0.35s var(--ease-cinematic),
+        opacity 0.35s var(--ease-cinematic);
+      cursor: default;
+    }
+
+    #pacific-map path.land.selectable {
+      cursor: pointer;
+    }
+
+    #pacific-map path.land.selectable:hover {
+      opacity: 0.85;
+    }
+
+    /* Staggered reveal for country groups */
+    .country-group {
+      opacity: 0;
+      transform: scale(0.92);
+      transition: opacity 0.7s var(--ease-cinematic),
+        transform 0.7s var(--ease-cinematic);
+    }
+
+    .country-group.map-visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    #map-tooltip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: rgba(250, 250, 248, 0.96);
+      padding: 5px 12px;
+      font-size: 12.5px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      white-space: nowrap;
+      backdrop-filter: blur(6px);
+      transition: opacity 0.25s;
+    }
+
+    /* Map loading */
+    #map-loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 20px;
+      margin-top: 20px;
+    }
+
+    .legend button {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--dim);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 3px 0;
+      transition: opacity 0.3s var(--ease-cinematic),
+        color 0.3s var(--ease-cinematic);
+      font-family: 'Inter', sans-serif;
+    }
+
+    .legend button .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ═══════════════════════════════════════════════
+   DISPLACEMENT — BIG COUNTER + CHARTS
+═══════════════════════════════════════════════ */
+    #displacement-section .counter-block {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 32px 0 10px;
+    }
+
+    #displacement-counter {
+      font-family: 'Merriweather', serif;
+      font-size: clamp(44px, 6vw, 76px);
+      font-weight: 900;
+      color: var(--coral);
+      line-height: 1;
+      letter-spacing: -2px;
+      transition: text-shadow 0.6s;
+    }
+
+    #displacement-counter.glow {
+      text-shadow: 0 0 30px rgba(212, 95, 60, 0.2),
+        0 0 60px rgba(212, 95, 60, 0.08);
+    }
+
+    .counter-unit {
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--dim);
+    }
+
+    .counter-ctx {
+      font-size: 13px;
+      color: var(--muted);
+      max-width: 480px;
+      line-height: 1.7;
+    }
+
+    /* ═══════════════════════════════════════════════
+   SPLIT LAYOUT (Act VI)
+═══════════════════════════════════════════════ */
+    .split-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 72px;
+      align-items: start;
+    }
+
+    .split-layout .split-intro {
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 768px) {
+      .split-layout {
+        grid-template-columns: 1fr;
+        gap: 48px;
+      }
+    }
+
+    /* Time-lapse button */
+    #play-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 22px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      color: var(--sky);
+      font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      letter-spacing: 0.3px;
+      transition: opacity 0.2s;
+    }
+
+    #play-btn:hover {
+      opacity: 0.7;
+    }
+
+    #play-btn:disabled {
+      color: var(--faint);
+      cursor: default;
+    }
+
+    /* Forecast dashed line label */
+    .forecast-label {
+      font-size: 10px;
+      color: var(--coral);
+      letter-spacing: 0.5px;
+      margin-top: 5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .forecast-label::before {
+      content: '';
+      display: inline-block;
+      width: 18px;
+      height: 1px;
+      border-top: 1.5px dashed var(--coral);
+    }
+
+    /* ═══════════════════════════════════════════════
+   RISK STAGGER
+═══════════════════════════════════════════════ */
+    .risk-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      max-width: 680px;
+      margin-top: 36px;
+    }
+
+    .risk-item {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+      opacity: 0;
+      transform: translateX(-16px);
+      transition: opacity 0.8s var(--ease-cinematic),
+        transform 0.8s var(--ease-cinematic);
+    }
+
+    .risk-item.visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    .risk-num {
+      font-family: 'Merriweather', serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--faint);
+      line-height: 1;
+      min-width: 28px;
+      transition: color 0.5s;
+    }
+
+    .risk-item.visible .risk-num {
+      color: var(--teal);
+    }
+
+    .risk-body strong {
+      display: block;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+
+    .risk-body p {
+      font-size: 13px;
+      color: var(--dim);
+      line-height: 1.65;
+    }
+
+    /* ═══════════════════════════════════════════════
+   FOOTER — DRAMATIC CLOSE
+═══════════════════════════════════════════════ */
+    footer {
+      text-align: center;
+      padding: 100px 24px 64px;
+      font-size: 11px;
+      color: var(--faint);
+      background: var(--bg);
+      letter-spacing: 0.5px;
+      position: relative;
+    }
+
+    footer::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.04), transparent);
+    }
+
+    footer .conclusion {
+      font-family: 'Merriweather', serif;
+      font-size: clamp(17px, 2.2vw, 22px);
+      font-style: italic;
+      color: var(--dim);
+      max-width: 560px;
+      margin: 0 auto 40px;
+      line-height: 1.8;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 1.6s var(--ease-cinematic),
+        transform 1.6s var(--ease-cinematic);
+    }
+
+    footer .conclusion.visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    footer span {
+      margin: 0 6px;
+      opacity: 0.5;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ═══════════════════════════════════════════════
+   COUNTER GLOW PULSE
+═══════════════════════════════════════════════ */
+    @keyframes counterPulse {
+      0% {
+        text-shadow: none;
+      }
+
+      50% {
+        text-shadow: 0 0 24px rgba(212, 95, 60, 0.25);
+      }
+
+      100% {
+        text-shadow: none;
+      }
+    }
+
+    /* ═══════════════════════════════════════════════
+   CHART SIZING — MEDIUM ONLY
+═══════════════════════════════════════════════ */
+    canvas {
+      max-height: 300px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="progress-bar"></div>
+
+  <nav id="nav-dots" aria-label="Section navigation">
+    <button data-target="hero" aria-label="Hero"></button>
+    <button data-target="map-section" aria-label="Map"></button>
+    <button data-target="act1" aria-label="Emissions"></button>
+    <button data-target="act3" aria-label="Sea Level"></button>
+    <button data-target="act2" aria-label="Ocean Heat"></button>
+    <button data-target="displacement-section" aria-label="Displacement"></button>
+    <button data-target="risk-section" aria-label="Risk"></button>
+    <button data-target="act4" aria-label="Projection"></button>
+  </nav>
+
+  <!-- ══════════════════════════════════════ HERO -->
+  <section id="hero">
+    <div id="hero-bg-word" aria-hidden="true">Pacific</div>
+
+    <span class="eyebrow reveal">Data Journalism &middot; Pacific Climate &middot; 2026</span>
+
+    <h1 class="reveal d1">From Emissions to <em>Evacuations</em> —<br>A Pacific Climate Story</h1>
+
+    <p class="hero-intro reveal d2">
+      Thirteen island nations. A fraction of global emissions. The full weight of its consequences.
+      This is how the Pacific is disappearing — in degrees, millimetres, and millions of displaced lives.
+    </p>
+
+    <ul class="lede-facts reveal d3">
+      <li>GHG emissions across Oceania peaked in 2012 at 241&thinsp;Mt CO&thinsp;&#x2082;e &mdash; nearly double
+        today&rsquo;s trajectory</li>
+      <li>Pacific sea levels rose +2.6&thinsp;mm in 2024, the steepest single-year acceleration on record</li>
+      <li>Over 1.2 million people have been displaced across the region since 2000</li>
+    </ul>
+
+    <div class="kpi-row">
+      <div class="kpi reveal d3">
+        <span class="kpi-num" data-count-to="2.1" data-suffix="mm">0</span>
+        <span class="kpi-label">Sea level rise per year</span>
+        <span class="kpi-ctx">2&times; faster than the 1990s</span>
+      </div>
+      <div class="kpi reveal d4">
+        <span class="kpi-num" data-count-to="1.2" data-suffix="M+">0</span>
+        <span class="kpi-label">People displaced</span>
+        <span class="kpi-ctx">since 2000</span>
+      </div>
+      <div class="kpi reveal d5">
+        <span class="kpi-num" data-count-to="14" data-suffix="">0</span>
+        <span class="kpi-label">Nations at existential risk</span>
+        <span class="kpi-ctx">facing permanent flooding</span>
+      </div>
+      <div class="kpi reveal d6">
+        <span class="kpi-num" data-count-to="85" data-suffix="%">0</span>
+        <span class="kpi-label">Regional renewable target</span>
+        <span class="kpi-ctx">Pacific goal by 2030</span>
+      </div>
+    </div>
+
+    <div class="scroll-cue" id="scroll-cue" aria-hidden="true">
+      <span>Scroll to explore</span>
+      <svg width="12" height="16" viewBox="0 0 12 16" fill="none">
+        <path d="M6 1v14M1 10l5 5 5-5" stroke="#0a8c6e" stroke-width="1.5" stroke-linecap="round"
+          stroke-linejoin="round" />
+      </svg>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════ MAP (zoom + reveal) -->
+  <section id="map-section" class="act">
+    <div class="reveal">
+      <span class="eyebrow">Pacific Islands</span>
+      <h2>Select a nation to filter every chart</h2>
+      <p class="section-lede">Click any island or legend entry to cross-filter all charts in this story, revealing each
+        nation&rsquo;s unique climate trajectory.</p>
+    </div>
+
+    <div class="reveal d1 scale-in">
+      <div id="filter-badge-wrap"></div>
+      <p class="map-instruction" id="map-instruction">Click any island to filter all charts by nation</p>
+
+      <div id="pacific-map-wrap">
+        <div id="map-loading">Loading geographic data&hellip;</div>
+        <svg id="pacific-map" viewBox="0 0 1100 550" preserveAspectRatio="xMidYMid meet"
+          aria-label="Oceania interactive map — real geographic boundaries">
+        </svg>
+        <div id="map-tooltip"></div>
+      </div>
+
+      <div class="legend" id="legend" role="list" aria-label="Country legend"></div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════ ACT I — EMISSIONS (slide-up reveal) -->
+  <section id="act1" class="act act-alt">
+    <div class="emission-layout">
+      <div class="emission-intro">
+        <div class="reveal">
+          <span class="eyebrow">Act I &middot; The Invisible Catalyst</span>
+          <h2>The Greenhouse Gas Footprint, 1970&ndash;2024</h2>
+          <p class="section-lede">Pacific islands contribute less than 0.03% of global emissions yet absorb a
+            disproportionate share of consequences. Watch the line draw itself — the 2012 peak driven by LNG
+            construction is unmistakable.</p>
+        </div>
+      </div>
+
+      <div class="reveal d1 from-left">
+        <div class="insight annotation-hidden" id="ghg-insight">
+          <strong>2012 &mdash; Pacific energy demand surge</strong>
+          +18% above decade average, driven by LNG infrastructure and inter-island shipping.<br>
+          <em>Emissions have declined 50% since the peak but structural fossil-fuel dependency persists.</em>
+        </div>
+      </div>
+
+      <div class="reveal d2 slow">
+        <div class="chart-head">
+          <span class="chart-unit">Mt CO&#x2082;e</span>
+          <span class="chart-source">Source: World Bank &middot; UNFCCC</span>
+        </div>
+        <canvas id="ghg-canvas" height="220"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════ ACT III — SEA LEVEL (scroll transform, full-width) -->
+  <section id="act3" class="act">
+    <div class="reveal">
+      <span class="eyebrow">Act II &middot; Sinking Shores</span>
+      <h2>Sea Level Rise, 1992&ndash;2030</h2>
+      <p class="section-lede">The ocean doesn&rsquo;t rise uniformly. Some Pacific atolls experience rates triple the
+        global mean. The line grows as you scroll — the forecast extension shows where we are headed.</p>
+    </div>
+    <div class="sea-level-full reveal d1 slow">
+      <div class="sea-scroll-hint" id="sea-scroll-hint">Keep scrolling to reveal the timeline</div>
+      <div class="insight" id="sea-insight">
+        <strong>2024 — highest anomaly on record at +2.6mm</strong>
+        The post-2010 acceleration is unambiguous. Tuvalu and Kiribati are tracking above the regional average.<br>
+        <em>At current rates, significant portions of both nations will be uninhabitable by 2060.</em>
+      </div>
+      <div class="chart-head">
+        <span class="chart-unit">mm vs. 1993 baseline</span>
+        <span class="chart-source">Source: CSIRO &middot; NOAA Satellite Altimetry</span>
+      </div>
+      <canvas id="sea-canvas" height="240"></canvas>
+      <div class="forecast-label">Dashed: projected 2025–2030 at current acceleration rate</div>
+      <button id="play-btn" type="button">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+        Replay time-lapse
+      </button>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════ ACT II — SCATTER (compact) -->
+  <section id="act2" class="act act-alt">
+    <div class="reveal">
+      <span class="eyebrow">Act III &middot; Boiling Waters, Broken Skies</span>
+      <h2>Sea Surface Temperature vs. Rainfall Anomalies</h2>
+      <p class="section-lede">As the ocean heats, rainfall collapses. Nations in the lower-right face the harshest
+        reality: warming seas and drying skies, simultaneously.</p>
+    </div>
+    <div class="reveal d1 slow">
+      <div class="insight">
+        <strong>Marshall Islands, Kiribati, Tuvalu</strong>
+        Record highest SST anomalies paired with extreme rainfall deficits. Drought risk is existential.<br>
+        <em>French Polynesia is the outlier: high SST but elevated rainfall due to intensified cyclone moisture.</em>
+      </div>
+      <div class="chart-head">
+        <span class="chart-unit">Bubble size = relative emissions</span>
+        <span class="chart-source">Source: NOAA &middot; World Bank</span>
+      </div>
+      <canvas id="scatter-canvas" height="280"></canvas>
+    </div>
+  </section>
+
+
+  <!-- ══════════════════════════════════════ DISPLACEMENT (split storytelling) -->
+  <section id="displacement-section" class="act act-alt">
+    <div class="reveal">
+      <span class="eyebrow">Act IV &middot; Human Cost</span>
+      <h2>1.2 Million Lives Uprooted</h2>
+    </div>
+    <div class="reveal d1">
+      <div class="counter-block">
+        <span id="displacement-counter">0</span>
+        <span class="counter-unit">people displaced</span>
+      </div>
+      <p class="counter-ctx">Since 2000, climate-driven events — cyclones, flooding, saltwater intrusion — have
+        permanently displaced over 1.2 million Pacific islanders. This number accelerates each decade.</p>
+    </div>
+    <div class="reveal d2 slow">
+      <div class="chart-head" style="margin-top:40px">
+        <span class="chart-unit">Thousands of people affected by climate disasters</span>
+        <span class="chart-source">EM-DAT</span>
+      </div>
+      <canvas id="disaster-canvas" height="290"></canvas>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════ RISK (stagger reveal) -->
+  <section id="risk-section" class="act">
+    <div class="reveal">
+      <span class="eyebrow">Act V &middot; The Risk Cascade</span>
+      <h2>Four compounding threats, one region</h2>
+      <p class="section-lede">No single event defines the crisis. It is the simultaneous convergence of multiple hazards
+        — each worsening the others.</p>
+    </div>
+
+    <ul class="risk-list" id="risk-list">
+      <li class="risk-item" data-delay="0">
+        <span class="risk-num">01</span>
+        <div class="risk-body">
+          <strong>Ocean acidification at 0.4 pH units below pre-industrial levels</strong>
+          <p>Coral reefs that protect coastlines from wave energy are bleaching at catastrophic rates. Without reefs,
+            storm surge damage increases by up to 5&times;.</p>
+        </div>
+      </li>
+      <li class="risk-item" data-delay="180">
+        <span class="risk-num">02</span>
+        <div class="risk-body">
+          <strong>Saltwater intrusion rendering freshwater aquifers undrinkable</strong>
+          <p>In Tuvalu and Kiribati, as much as 60% of fresh groundwater has been contaminated. Desalination plants now
+            run on diesel — adding to emissions in a feedback loop.</p>
+        </div>
+      </li>
+      <li class="risk-item" data-delay="360">
+        <span class="risk-num">03</span>
+        <div class="risk-body">
+          <strong>Category 5 cyclone frequency doubled since 1990</strong>
+          <p>Warmer sea surface temperatures provide more energy to tropical cyclones. Fiji, Vanuatu, and the Solomons
+            face a cycle of rebuild-and-destroy with no end in sight.</p>
+        </div>
+      </li>
+      <li class="risk-item" data-delay="540">
+        <span class="risk-num">04</span>
+        <div class="risk-body">
+          <strong>Food system collapse as crop yields fall 18% by 2040</strong>
+          <p>Shifting rainfall, saline soils, and intensifying heat stress are projected to reduce staple crop yields
+            across all 13 nations simultaneously — a first in recorded history.</p>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════════════════════════ ACT VI — PROJECTION (dramatic close) -->
+  <section id="act4" class="act act-alt">
+    <div class="split-layout">
+      <div class="split-intro reveal">
+        <span class="eyebrow">Act VI &middot; Turning the Tide</span>
+        <h2>The Renewable Pivot</h2>
+        <p class="section-lede">The nations hit hardest are also leading the energy transition. Building renewable
+          capacity is not idealism — it&rsquo;s survival strategy.</p>
+      </div>
+
+      <div class="reveal d1 slow">
+        <div class="insight" style="max-width:100%">
+          <strong>Papua New Guinea &amp; Solomon Islands — 2,100 MW renewable pipeline</strong>
+          Hydro and solar investments are reshaping the energy mix faster than any other sub-region globally.
+        </div>
+        <div class="chart-head">
+          <span class="chart-unit">Installed renewable capacity (MW)</span>
+          <span class="chart-source">IRENA</span>
+        </div>
+        <canvas id="renewable-canvas" height="310"></canvas>
+      </div>
+
+      <div class="reveal d2 slow">
+        <div class="insight" style="max-width:100%">
+          <strong>Fiji leads disaster impact at 1,220K affected</strong>
+          Cyclone intensity and coastal flooding have driven compounding displacement events. Yet Fiji is also
+          accelerating renewable deployment fastest.
+        </div>
+        <div class="chart-head">
+          <span class="chart-unit">Thousands of people affected by climate disasters</span>
+          <span class="chart-source">EM-DAT</span>
+        </div>
+        <canvas id="disaster2-canvas" height="310"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════ FOOTER — DRAMATIC CLOSE -->
+  <footer>
+    <p class="conclusion" id="conclusion">
+      &ldquo;The Pacific does not ask for sympathy. It asks for action — before its islands exist only in memory.&rdquo;
+    </p>
+    <p>NOAA <span>&middot;</span> World Bank Open Data <span>&middot;</span> EM-DAT <span>&middot;</span> IRENA
+      <span>&middot;</span> CSIRO <span>&middot;</span> Oceania Interactive Climate Report 2026
+    </p>
+  </footer>
+
+  <script>
+    /* ══════════════════════════════════════════════════
+       DATA
+    ══════════════════════════════════════════════════ */
+    const COUNTRIES = [
+      'Fiji', 'Solomon Islands', 'Vanuatu', 'Marshall Islands', 'Papua New Guinea',
+      'Tonga', 'Micronesia', 'Palau', 'Samoa', 'Kiribati', 'Cook Islands', 'French Polynesia', 'Tuvalu',
+    ];
+
+    const CC = {
+      'Fiji': '#e05c3a',
+      'Solomon Islands': '#2e9e72',
+      'Vanuatu': '#2a9fd6',
+      'Marshall Islands': '#d4993c',
+      'Papua New Guinea': '#8b6abf',
+      'Tonga': '#c96b2f',
+      'Micronesia': '#3aab8e',
+      'Palau': '#c45f8a',
+      'Samoa': '#4a90d9',
+      'Kiribati': '#c9a83c',
+      'Cook Islands': '#4db86a',
+      'French Polynesia': '#9b5ec7',
+      'Tuvalu': '#d44e4e',
+    };
+
+    const GHG_YEARS = Array.from({ length: 55 }, (_, i) => 1970 + i);
+    const BASE_GHG = [
+      210, 208, 206, 205, 204, 203, 201, 200, 199, 198,
+      196, 195, 194, 192, 190, 188, 187, 186, 185, 184,
+      183, 182, 181, 180, 178, 175, 172, 168, 165, 162,
+      158, 155, 152, 150, 148, 160, 175, 200, 241, 220,
+      200, 180, 165, 155, 148, 142, 138, 135, 132, 130,
+      128, 126, 124, 122, 120,
+    ];
+    const GHG_REGIONAL = BASE_GHG.map((v, i) => +(v + Math.sin(i * 0.8) * 3.2).toFixed(1));
+
+    const GHG_OFFSETS = {
+      'Fiji': { scale: 0.28, shift: 12, phase: 0.3 },
+      'Solomon Islands': { scale: 0.12, shift: 4, phase: 0.8 },
+      'Vanuatu': { scale: 0.09, shift: 2, phase: 1.1 },
+      'Marshall Islands': { scale: 0.06, shift: -2, phase: 0.5 },
+      'Papua New Guinea': { scale: 0.55, shift: 28, phase: 0.2 },
+      'Tonga': { scale: 0.07, shift: -1, phase: 1.4 },
+      'Micronesia': { scale: 0.05, shift: -3, phase: 0.9 },
+      'Palau': { scale: 0.04, shift: -4, phase: 1.7 },
+      'Samoa': { scale: 0.08, shift: 1, phase: 0.6 },
+      'Kiribati': { scale: 0.04, shift: -4, phase: 2.0 },
+      'Cook Islands': { scale: 0.03, shift: -5, phase: 1.2 },
+      'French Polynesia': { scale: 0.15, shift: 6, phase: 0.4 },
+      'Tuvalu': { scale: 0.02, shift: -6, phase: 1.8 },
+    };
+    const GHG_PER = {};
+    COUNTRIES.forEach(c => {
+      const o = GHG_OFFSETS[c];
+      GHG_PER[c] = BASE_GHG.map((v, i) =>
+        +(v * o.scale + o.shift + Math.sin(i * 0.8 + o.phase) * 2.5).toFixed(2)
+      );
+    });
+
+    const GHG_ANN = {
+      'Regional': { year: 2012, text: 'Pacific-wide energy demand surge &mdash; +18% above decade avg', sub: 'Emissions have fallen 50% since the peak but fossil-fuel dependency persists.' },
+      'Fiji': { year: 2012, text: 'Construction &amp; transport boom &mdash; +22%', sub: 'Tourism rebound and inter-island shipping drove the surge.' },
+      'Solomon Islands': { year: 2008, text: 'Land-use change &amp; deforestation &mdash; +31%', sub: 'Forest clearing for palm oil drove a multi-year emissions spike.' },
+      'Vanuatu': { year: 2002, text: 'Volcanic activity &amp; agriculture expansion &mdash; +27%', sub: 'Post-eruption rebuilding and copra production combined.' },
+      'Marshall Islands': { year: 2015, text: 'Diesel generation reliance peak &mdash; +35%', sub: 'No domestic energy resources forced continued fossil imports.' },
+      'Papua New Guinea': { year: 2012, text: 'LNG project construction &mdash; +44%', sub: 'The PNG LNG project was the largest industrial undertaking in Pacific history.' },
+      'Tonga': { year: 2011, text: 'Shipping &amp; aviation fuel surge &mdash; +19%', sub: 'Post-cyclone reconstruction drove a sharp temporary increase.' },
+      'Micronesia': { year: 2012, text: 'Anomalous energy sector surge &mdash; +40%', sub: 'Grid unreliability forced fallback to diesel generation.' },
+      'Palau': { year: 2012, text: 'Tourism-driven diesel peak &mdash; +40%', sub: 'Air-conditioning load from resort expansion dominated the island grid.' },
+      'Samoa': { year: 2013, text: 'Post-tsunami reconstruction &mdash; +28%', sub: 'Heavy equipment and logistics for rebuilding Apia drove the peak.' },
+      'Kiribati': { year: 2016, text: 'Adaptation infrastructure build-out &mdash; +33%', sub: 'Seawall construction and desalination plants required significant fossil fuel.' },
+      'Cook Islands': { year: 2014, text: 'Tourism growth &amp; diesel reliance &mdash; +21%', sub: 'Rarotonga resort expansion outpaced renewable capacity additions.' },
+      'French Polynesia': { year: 2012, text: 'Inter-island shipping fuel peak &mdash; +25%', sub: 'Distance between atolls makes fossil-fuel shipping unavoidable.' },
+      'Tuvalu': { year: 2017, text: 'Emergency desalination &amp; gen-sets &mdash; +38%', sub: 'Severe drought forced round-the-clock diesel-powered water production.' },
+    };
+
+    // Sea level — historical 1992-2024 + forecast 2025-2030
+    const SEA_YEARS = Array.from({ length: 33 }, (_, i) => 1992 + i);
+    const SEA_FORECAST_YEARS = [2025, 2026, 2027, 2028, 2029, 2030];
+    const SEA_BASE = [
+      -0.4, -0.8, 0.1, 0.3, 0.2, 0.4, -1.0, 0.1, 0.5, 0.4,
+      0.6, 0.8, 1.0, 0.7, 0.8, 1.0, 0.6, 1.2, 1.0, 1.1,
+      1.4, 1.5, 1.7, 1.9, 1.6, 2.1, 1.8, 2.0, 2.1, 2.3,
+      2.5, 2.4, 2.6,
+    ];
+    const SEA_FORECAST = [2.9, 3.2, 3.6, 4.0, 4.5, 5.1];
+
+    const SEA_OFFSETS = {
+      'Fiji': { add: 0.10, scale: 1.05 },
+      'Solomon Islands': { add: 0.15, scale: 1.10 },
+      'Vanuatu': { add: 0.05, scale: 0.95 },
+      'Marshall Islands': { add: 0.30, scale: 1.25 },
+      'Papua New Guinea': { add: -0.10, scale: 0.90 },
+      'Tonga': { add: 0.20, scale: 1.15 },
+      'Micronesia': { add: 0.25, scale: 1.20 },
+      'Palau': { add: 0.08, scale: 1.02 },
+      'Samoa': { add: 0.18, scale: 1.12 },
+      'Kiribati': { add: 0.40, scale: 1.35 },
+      'Cook Islands': { add: 0.12, scale: 1.08 },
+      'French Polynesia': { add: 0.06, scale: 0.98 },
+      'Tuvalu': { add: 0.45, scale: 1.40 },
+    };
+    const SEA_PER = {};
+    COUNTRIES.forEach(c => {
+      const o = SEA_OFFSETS[c];
+      SEA_PER[c] = SEA_BASE.map(v => +(v * o.scale + o.add).toFixed(2));
+    });
+
+    const SCATTER = [
+      { country: 'Fiji', sst: 4.8, rain: 85 },
+      { country: 'Solomon Islands', sst: 5.2, rain: 110 },
+      { country: 'Vanuatu', sst: 3.9, rain: 55 },
+      { country: 'Marshall Islands', sst: 7.1, rain: -85 },
+      { country: 'Papua New Guinea', sst: 2.4, rain: 5 },
+      { country: 'Tonga', sst: 5.9, rain: 40 },
+      { country: 'Micronesia', sst: 6.3, rain: 70 },
+      { country: 'Palau', sst: 4.1, rain: 25 },
+      { country: 'Samoa', sst: 5.5, rain: 60 },
+      { country: 'Kiribati', sst: 8.4, rain: -120 },
+      { country: 'Cook Islands', sst: 6.8, rain: 30 },
+      { country: 'French Polynesia', sst: 9.1, rain: 280 },
+      { country: 'Tuvalu', sst: 7.8, rain: -95 },
+    ];
+
+    const DISASTER_RAW = {
+      'Fiji': 1220, 'Solomon Islands': 480, 'Vanuatu': 310, 'Marshall Islands': 125,
+      'Papua New Guinea': 200, 'Tonga': 150, 'Micronesia': 80, 'Palau': 45,
+      'Samoa': 110, 'Kiribati': 65, 'Cook Islands': 30, 'French Polynesia': 55, 'Tuvalu': 20,
+    };
+    const RENEWABLE_RAW = {
+      'Papua New Guinea': 1280, 'Solomon Islands': 820, 'Kiribati': 730, 'Samoa': 620,
+      'Vanuatu': 480, 'Fiji': 410, 'Marshall Islands': 210, 'Cook Islands': 160,
+      'French Polynesia': 140, 'Tonga': 110, 'Micronesia': 90, 'Palau': 75, 'Tuvalu': 40,
+    };
+
+    const DIS_SORTED = Object.entries(DISASTER_RAW).sort((a, b) => a[1] - b[1]).map(([c, v]) => ({ country: c, value: v }));
+    const REN_SORTED = Object.entries(RENEWABLE_RAW).sort((a, b) => a[1] - b[1]).map(([c, v]) => ({ country: c, value: v }));
+
+    // ISO numeric codes → country names
+    const ISO_MAP = {
+      '036': 'Australia',
+      '554': 'New Zealand',
+      '598': 'Papua New Guinea',
+      '090': 'Solomon Islands',
+      '548': 'Vanuatu',
+      '242': 'Fiji',
+      '882': 'Samoa',
+      '776': 'Tonga',
+      '584': 'Marshall Islands',
+      '296': 'Kiribati',
+      '583': 'Micronesia',
+      '585': 'Palau',
+      '184': 'Cook Islands',
+      '798': 'Tuvalu',
+      '258': 'French Polynesia',
+    };
+
+    const SELECTABLE = new Set(COUNTRIES);
+
+    /* ══════════════════════════════════════════════════
+       STATE
+    ══════════════════════════════════════════════════ */
+    let lockedCountry = null;
+    let hoverCountry = null;
+    function active() { return lockedCountry || hoverCountry; }
+
+    let ghgChart, scatterChart, seaChart, disRef, dis2Ref, renRef;
+
+    const chartInited = { ghg: false, scatter: false, sea: false, disaster: false, renewable: false };
+
+    /* ══════════════════════════════════════════════════
+       SCROLL PROGRESS + NAV DOTS
+    ══════════════════════════════════════════════════ */
+    const progBar = document.getElementById('progress-bar');
+    const SIDS = ['hero', 'map-section', 'act1', 'act3', 'act2', 'displacement-section', 'risk-section', 'act4'];
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    function onScroll() {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      progBar.style.width = (max > 0 ? (window.scrollY / max) * 100 : 0) + '%';
+      updateDots();
+      parallaxHero();
+      hideScrollCue();
+      checkCounters();
+      checkDisplCounter();
+      checkRiskList();
+      checkChartTriggers();
+      checkConclusion();
+      updateSeaFromScroll();
+    }
+
+    document.querySelectorAll('#nav-dots button').forEach(btn =>
+      btn.addEventListener('click', () =>
+        document.getElementById(btn.dataset.target)?.scrollIntoView({ behavior: 'smooth' })
+      )
+    );
+
+    function updateDots() {
+      let cur = SIDS[0];
+      SIDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= window.innerHeight * 0.5) cur = id;
+      });
+      document.querySelectorAll('#nav-dots button').forEach(b =>
+        b.classList.toggle('active', b.dataset.target === cur)
+      );
+    }
+
+    /* ══════════════════════════════════════════════════
+       INTERSECTION OBSERVER — REVEAL SYSTEM
+    ══════════════════════════════════════════════════ */
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.08,
+      rootMargin: '0px 0px -6% 0px'
+    });
+
+    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+    /* ══════════════════════════════════════════════════
+       PARALLAX HERO BG WORD
+    ══════════════════════════════════════════════════ */
+    const heroBgWord = document.getElementById('hero-bg-word');
+    function parallaxHero() {
+      const sy = window.scrollY;
+      heroBgWord.style.transform = `translateY(calc(-50% + ${sy * 0.3}px))`;
+    }
+
+    /* ══════════════════════════════════════════════════
+       HIDE SCROLL CUE AFTER SCROLLING
+    ══════════════════════════════════════════════════ */
+    const scrollCue = document.getElementById('scroll-cue');
+    let scrollCueHidden = false;
+    function hideScrollCue() {
+      if (scrollCueHidden) return;
+      if (window.scrollY > 120) {
+        scrollCueHidden = true;
+        scrollCue.classList.add('hidden');
+      }
+    }
+
+    /* ══════════════════════════════════════════════════
+       KPI COUNT-UP
+    ══════════════════════════════════════════════════ */
+    let kpisDone = false;
+    function checkCounters() {
+      if (kpisDone) return;
+      const row = document.querySelector('.kpi-row');
+      if (!row) return;
+      if (row.getBoundingClientRect().top < window.innerHeight * 0.88) {
+        kpisDone = true;
+        document.querySelectorAll('[data-count-to]').forEach(el => {
+          const target = parseFloat(el.dataset.countTo);
+          const suffix = el.dataset.suffix || '';
+          const isFloat = String(target).includes('.');
+          const duration = 1800;
+          const start = performance.now();
+          const kpiEl = el.closest('.kpi');
+          function tick(now) {
+            const p = Math.min((now - start) / duration, 1);
+            // ease out quart
+            const e = 1 - Math.pow(1 - p, 4);
+            const val = target * e;
+            el.textContent = (isFloat ? val.toFixed(1) : Math.round(val)) + suffix;
+            if (p < 1) {
+              requestAnimationFrame(tick);
+            } else {
+              // Add counted class for styling
+              if (kpiEl) kpiEl.classList.add('counted');
+            }
+          }
+          requestAnimationFrame(tick);
+        });
+      }
+    }
+
+    /* ══════════════════════════════════════════════════
+       DISPLACEMENT COUNTER
+    ══════════════════════════════════════════════════ */
+    const displCounter = document.getElementById('displacement-counter');
+    let displDone = false;
+    function checkDisplCounter() {
+      if (displDone || !displCounter) return;
+      const rect = displCounter.getBoundingClientRect();
+      if (rect.top < window.innerHeight * 0.85) {
+        displDone = true;
+        const target = 1200000;
+        const duration = 2400;
+        const start = performance.now();
+        function tick(now) {
+          const p = Math.min((now - start) / duration, 1);
+          const e = 1 - Math.pow(1 - p, 3);
+          const val = Math.round(target * e);
+          displCounter.textContent = val.toLocaleString();
+          if (p < 1) {
+            requestAnimationFrame(tick);
+          } else {
+            displCounter.textContent = '1,200,000+';
+            displCounter.classList.add('glow');
+          }
+        }
+        requestAnimationFrame(tick);
+      }
+    }
+
+    /* ══════════════════════════════════════════════════
+       RISK LIST STAGGER
+    ══════════════════════════════════════════════════ */
+    let riskDone = false;
+    function checkRiskList() {
+      if (riskDone) return;
+      const list = document.getElementById('risk-list');
+      if (!list) return;
+      if (list.getBoundingClientRect().top < window.innerHeight * 0.82) {
+        riskDone = true;
+        list.querySelectorAll('.risk-item').forEach(item => {
+          const delay = parseInt(item.dataset.delay) || 0;
+          setTimeout(() => item.classList.add('visible'), delay);
+        });
+      }
+    }
+
+    /* ══════════════════════════════════════════════════
+       CONCLUSION FADE
+    ══════════════════════════════════════════════════ */
+    function checkConclusion() {
+      const c = document.getElementById('conclusion');
+      if (c && !c.classList.contains('visible') && c.getBoundingClientRect().top < window.innerHeight * 0.88) {
+        c.classList.add('visible');
+      }
+    }
+
+    /* ══════════════════════════════════════════════════
+       CHART TRIGGER ON SCROLL
+    ══════════════════════════════════════════════════ */
+    function checkChartTriggers() {
+      if (!chartInited.ghg) {
+        const el = document.getElementById('ghg-canvas');
+        if (el && el.getBoundingClientRect().top < window.innerHeight * 0.9) {
+          chartInited.ghg = true;
+          initGHG();
+        }
+      }
+      if (!chartInited.scatter) {
+        const el = document.getElementById('scatter-canvas');
+        if (el && el.getBoundingClientRect().top < window.innerHeight * 0.9) {
+          chartInited.scatter = true;
+          initScatter();
+        }
+      }
+      if (!chartInited.sea) {
+        const el = document.getElementById('sea-canvas');
+        if (el && el.getBoundingClientRect().top < window.innerHeight * 0.92) {
+          chartInited.sea = true;
+          initSea();
+        }
+      }
+      if (!chartInited.disaster) {
+        const el = document.getElementById('disaster-canvas');
+        if (el && el.getBoundingClientRect().top < window.innerHeight * 0.9) {
+          chartInited.disaster = true;
+          disRef = makeBar('disaster-canvas', DIS_SORTED, '#d45f3c');
+          dis2Ref = makeBar('disaster2-canvas', DIS_SORTED, '#d45f3c');
+        }
+      }
+      if (!chartInited.renewable) {
+        const el = document.getElementById('renewable-canvas');
+        if (el && el.getBoundingClientRect().top < window.innerHeight * 0.9) {
+          chartInited.renewable = true;
+          renRef = makeBar('renewable-canvas', REN_SORTED, '#2e9e72');
+        }
+      }
+    }
+
+    /* ══════════════════════════════════════════════════
+       MAP — D3 + Natural Earth TopoJSON
+    ══════════════════════════════════════════════════ */
+    const mapTooltip = document.getElementById('map-tooltip');
+    const mapWrap = document.getElementById('pacific-map-wrap');
+
+    const W = 1100, H = 550;
+
+    const projection = d3.geoMercator()
+      .rotate([-155, 0, 0])
+      .scale(320)
+      .translate([W * 0.46, H / 2 + 60]);
+
+    const geoPath = d3.geoPath().projection(projection);
+
+    const svg = d3.select('#pacific-map')
+      .attr('viewBox', `0 0 ${W} ${H}`)
+      .style('background', 'transparent');
+
+    // Ocean background
+    svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#dceef7');
+
+    // Subtle graticule grid
+    svg.append('path')
+      .datum(d3.geoGraticule().step([30, 15])())
+      .attr('d', geoPath)
+      .attr('fill', 'none')
+      .attr('stroke', '#c4d8e8')
+      .attr('stroke-width', 0.4);
+
+    // Equator line
+    svg.append('path')
+      .datum({ type: 'LineString', coordinates: d3.range(-180, 181, 1).map(lon => [lon, 0]) })
+      .attr('d', geoPath)
+      .attr('fill', 'none')
+      .attr('stroke', '#aacce0')
+      .attr('stroke-width', 0.9)
+      .attr('stroke-dasharray', '4,6');
+
+    // Equator label
+    const [, eqY] = projection([10, 0]);
+    svg.append('text').attr('x', 10).attr('y', eqY - 4)
+      .attr('font-size', 8).attr('font-family', 'Inter').attr('fill', '#8ab2c8').text('Equator');
+
+    // Compass rose
+    const compassG = svg.append('g').attr('transform', `translate(${W - 38}, 32)`).attr('opacity', 0.55);
+    compassG.append('line').attr('x1', 0).attr('y1', -12).attr('x2', 0).attr('y2', 12).attr('stroke', '#6a9ab8').attr('stroke-width', 1);
+    compassG.append('line').attr('x1', -12).attr('y1', 0).attr('x2', 12).attr('y2', 0).attr('stroke', '#6a9ab8').attr('stroke-width', 1);
+    compassG.append('text').attr('x', 0).attr('y', -16).attr('text-anchor', 'middle').attr('fill', '#6a9ab8').attr('font-size', 8).attr('font-family', 'Inter').text('N');
+
+    const landGroup = svg.append('g').attr('id', 'land-group');
+    const islandGroups = svg.append('g').attr('id', 'island-groups');
+    const labelGroup = svg.append('g').attr('id', 'label-group').style('pointer-events', 'none');
+
+    function shortName(c) {
+      const M = {
+        'Papua New Guinea': 'Papua N.G.',
+        'French Polynesia': 'Fr. Polynesia',
+        'Marshall Islands': 'Marshall Is.',
+        'Solomon Islands': 'Solomon Is.',
+        'Cook Islands': 'Cook Is.',
+      };
+      return M[c] || c;
+    }
+
+    const LABEL_OFFSET = {
+      'Australia': [0, 0],
+      'New Zealand': [8, 0],
+      'Papua New Guinea': [0, -4],
+      'Solomon Islands': [0, 12],
+      'Vanuatu': [0, 14],
+      'Fiji': [0, 12],
+      'Samoa': [0, 11],
+      'Tonga': [12, 0],
+      'Marshall Islands': [0, -10],
+      'Kiribati': [0, -10],
+      'Micronesia': [0, -10],
+      'Palau': [-12, 0],
+      'Cook Islands': [0, 12],
+      'Tuvalu': [-14, 0],
+      'French Polynesia': [0, 12],
+    };
+
+    function landFill(c) {
+      const a = active();
+      if (c === 'Australia' || c === 'New Zealand') return '#e0d5bc';
+      if (!a) return '#a0c8df';
+      return a === c ? CC[c] : '#b8d4e5';
+    }
+    function landOpacity(c) {
+      const a = active();
+      if (c === 'Australia' || c === 'New Zealand') return 1;
+      return (!a || a === c) ? 1 : 0.2;
+    }
+
+    let mapRevealDone = false;
+    let mapLoaded = false;
+    let countryGroupEls = [];
+
+    function checkMapReveal() {
+      if (mapRevealDone || !mapLoaded) return;
+      const wrap = document.getElementById('pacific-map-wrap');
+      if (!wrap) return;
+      if (wrap.getBoundingClientRect().top < window.innerHeight * 0.85) {
+        mapRevealDone = true;
+        // Sequential reveal — islands appear one by one
+        countryGroupEls.forEach(({ el }, i) => {
+          setTimeout(() => el.classed('map-visible', true), 80 + i * 90);
+        });
+      }
+    }
+    window.addEventListener('scroll', checkMapReveal, { passive: true });
+
+    function updateMapVisuals() {
+      countryGroupEls.forEach(({ country, el }) => {
+        const f = landFill(country);
+        const o = landOpacity(country);
+        const stroke = lockedCountry === country && SELECTABLE.has(country) ? '#003355' : 'none';
+        el.selectAll('path.land, circle.land')
+          .attr('fill', f)
+          .attr('opacity', o)
+          .attr('stroke', stroke)
+          .attr('stroke-width', 1.2);
+        labelGroup.selectAll(`text[data-country="${country}"]`)
+          .attr('fill', (!active() || active() === country) ? '#334455' : '#8aabb8')
+          .attr('opacity', (!active() || active() === country) ? 1 : 0.4);
+      });
+    }
+
+    function showTip(c, event) {
+      const rect = mapWrap.getBoundingClientRect();
+      const mx = (event.clientX || 0) - rect.left;
+      const my = (event.clientY || 0) - rect.top;
+      mapTooltip.style.left = (mx + 14) + 'px';
+      mapTooltip.style.top = (my - 36) + 'px';
+      mapTooltip.style.display = 'block';
+      mapTooltip.style.color = CC[c] || '#334455';
+      mapTooltip.textContent = c + (lockedCountry === c ? ' \u2713' : '');
+    }
+
+    svg.on('click', () => { lockedCountry = null; updateAll(); renderTag(); });
+
+    function toggleLock(c) {
+      lockedCountry = lockedCountry === c ? null : c;
+      updateAll(); renderTag();
+    }
+
+    function renderTag() {
+      const wrap = document.getElementById('filter-badge-wrap');
+      const hint = document.getElementById('map-instruction');
+      if (lockedCountry) {
+        hint.style.display = 'none';
+        wrap.innerHTML = `<div class="filter-tag">
+      <span class="dot" style="background:${CC[lockedCountry]}"></span>
+      ${lockedCountry}
+      <button onclick="clearLock()" aria-label="Clear filter">&times;</button>
+    </div>`;
+      } else {
+        hint.style.display = '';
+        wrap.innerHTML = '';
+      }
+    }
+
+    function clearLock() { lockedCountry = null; updateAll(); renderTag(); }
+
+    (function buildLegend() {
+      const leg = document.getElementById('legend');
+      COUNTRIES.forEach(c => {
+        const btn = document.createElement('button');
+        btn.setAttribute('role', 'listitem');
+        btn.innerHTML = `<span class="dot" style="background:${CC[c]}"></span>${c}`;
+        btn.addEventListener('click', () => toggleLock(c));
+        btn.addEventListener('mouseenter', () => { hoverCountry = c; updateAll(); });
+        btn.addEventListener('mouseleave', () => { hoverCountry = null; updateAll(); });
+        leg.appendChild(btn);
+      });
+    })();
+
+    function updateLegend() {
+      const a = active();
+      document.querySelectorAll('#legend button').forEach(btn => {
+        const c = btn.textContent.trim();
+        btn.style.opacity = a && a !== c ? '0.3' : '1';
+        btn.style.color = lockedCountry === c ? CC[c] : '';
+        btn.style.fontWeight = lockedCountry === c ? '600' : '';
+      });
+    }
+
+    // ── Fetch Natural Earth 50m countries TopoJSON (better island detail) ──
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json')
+      .then(r => r.json())
+      .then(world => {
+        document.getElementById('map-loading').style.display = 'none';
+        const countries = topojson.feature(world, world.objects.countries);
+
+        const background = [];
+        const islands = [];
+
+        countries.features.forEach(f => {
+          const name = ISO_MAP[String(f.id).padStart(3, '0')];
+          if (!name) return;
+          if (name === 'Australia' || name === 'New Zealand') {
+            background.push({ name, feature: f });
+          } else {
+            islands.push({ name, feature: f });
+          }
+        });
+
+        // Background land (Australia, NZ) — not filterable, immediately visible
+        background.forEach(({ name, feature }) => {
+          const g = landGroup.append('g')
+            .attr('class', 'country-group map-visible')
+            .attr('aria-label', name);
+
+          g.append('path')
+            .datum(feature)
+            .attr('class', 'land')
+            .attr('d', geoPath)
+            .attr('fill', '#e0d5bc')
+            .attr('stroke', '#c8bc96')
+            .attr('stroke-width', 0.6);
+
+          try {
+            const [cx, cy] = geoPath.centroid(feature);
+            if (!isNaN(cx) && !isNaN(cy)) {
+              const [dx, dy] = LABEL_OFFSET[name] || [0, 0];
+              labelGroup.append('text')
+                .attr('data-country', name)
+                .attr('x', cx + dx).attr('y', cy + dy)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', name === 'Australia' ? 12 : 8)
+                .attr('font-family', 'Inter')
+                .attr('font-weight', '500')
+                .attr('fill', '#6b5a2e')
+                .text(shortName(name));
+            }
+          } catch (e) { }
+
+          countryGroupEls.push({ country: name, el: g });
+        });
+
+        // Selectable island nations — render smaller ones last (on top)
+        islands.sort((a, b) => {
+          function area(f) {
+            try { const b = geoPath.bounds(f.feature); return (b[1][0] - b[0][0]) * (b[1][1] - b[0][1]); }
+            catch { return 0; }
+          }
+          return area(b) - area(a);
+        });
+
+        islands.forEach(({ name, feature }) => {
+          const g = islandGroups.append('g')
+            .attr('class', 'country-group')
+            .attr('aria-label', name)
+            .style('cursor', 'pointer');
+
+          g.append('path')
+            .datum(feature)
+            .attr('class', 'land selectable')
+            .attr('d', geoPath)
+            .attr('fill', landFill(name))
+            .attr('stroke', 'none')
+            .attr('stroke-width', 1.2);
+
+          // Atoll dot for tiny islands
+          try {
+            const [cx, cy] = geoPath.centroid(feature);
+            if (!isNaN(cx) && !isNaN(cy)) {
+              g.append('circle')
+                .attr('class', 'land selectable atoll-dot')
+                .attr('cx', cx).attr('cy', cy)
+                .attr('r', 4)
+                .attr('fill', landFill(name))
+                .attr('stroke', 'none');
+            }
+          } catch (e) { }
+
+          try {
+            const [cx, cy] = geoPath.centroid(feature);
+            if (!isNaN(cx) && !isNaN(cy)) {
+              const [dx, dy] = LABEL_OFFSET[name] || [0, 0];
+              labelGroup.append('text')
+                .attr('data-country', name)
+                .attr('x', cx + dx).attr('y', cy + dy + 1)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', 7.5)
+                .attr('font-family', 'Inter')
+                .attr('fill', '#334455')
+                .text(shortName(name));
+            }
+          } catch (e) { }
+
+          g.on('mouseenter', function (event) {
+            hoverCountry = name;
+            showTip(name, event);
+            updateAll();
+          })
+            .on('mousemove', function (event) { showTip(name, event); })
+            .on('mouseleave', function () {
+              hoverCountry = null;
+              mapTooltip.style.display = 'none';
+              updateAll();
+            })
+            .on('click', function (event) {
+              event.stopPropagation();
+              toggleLock(name);
+            });
+
+          countryGroupEls.push({ country: name, el: g });
+        });
+
+        mapLoaded = true;
+        checkMapReveal();
+        onScroll();
+      })
+      .catch(() => {
+        const el = document.getElementById('map-loading');
+        if (el) el.textContent = 'Map data unavailable.';
+      });
+
+    /* ══════════════════════════════════════════════════
+       CHART.JS DEFAULTS
+    ══════════════════════════════════════════════════ */
+    Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+
+    function grad(ctx, color, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, color + '50');
+      g.addColorStop(1, color + '02');
+      return g;
+    }
+
+    const TT = {
+      backgroundColor: 'rgba(250,250,248,0.97)',
+      titleColor: '#111',
+      bodyColor: '#555',
+      borderWidth: 0,
+      padding: 10,
+      cornerRadius: 0,
+      titleFont: { size: 12, weight: '600' },
+      bodyFont: { size: 11 },
+    };
+
+    /* ══════════════════════════════════════════════════
+       GHG CHART — progressive line draw with annotation reveal
+    ══════════════════════════════════════════════════ */
+    function initGHG() {
+      const canvas = document.getElementById('ghg-canvas');
+      const ctx = canvas.getContext('2d');
+      const color = '#2a9fd6';
+
+      ghgChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: GHG_YEARS,
+          datasets: [{
+            data: new Array(GHG_REGIONAL.length).fill(null),
+            borderColor: color,
+            borderWidth: 1.75,
+            backgroundColor: grad(ctx, color, 220),
+            fill: true,
+            tension: 0.38,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            pointBackgroundColor: color,
+            spanGaps: false,
+          }],
+        },
+        options: {
+          responsive: true,
+          animation: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...TT,
+              callbacks: { label: c => (c.raw != null ? c.raw.toFixed(1) : '--') + ' Mt CO\u2082e' },
+            },
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              border: { display: false },
+              ticks: { color: '#aaa', font: { size: 9.5 }, maxTicksLimit: 10 },
+            },
+            y: {
+              grid: { color: '#ebebeb', lineWidth: 0.7 },
+              border: { display: false },
+              ticks: { color: '#aaa', font: { size: 9.5 }, maxTicksLimit: 5 },
+              min: 0,
+            },
+          },
+        },
+      });
+
+      // Hide annotation initially
+      const insight = document.getElementById('ghg-insight');
+      insight.classList.add('annotation-hidden');
+
+      // Draw line progressively — cinematic pacing
+      let i = 0;
+      const series = GHG_REGIONAL;
+      const ds = ghgChart.data.datasets[0];
+      function drawNext() {
+        if (i < series.length) {
+          ds.data[i] = series[i];
+          ghgChart.update('none');
+          i++;
+          setTimeout(drawNext, 22);
+        } else {
+          // Line complete — reveal annotation
+          setTimeout(() => {
+            insight.classList.remove('annotation-hidden');
+            insight.classList.add('annotation-visible');
+          }, 300);
+        }
+      }
+      drawNext();
+    }
+
+    function updateGHG() {
+      if (!ghgChart) return;
+      const c = active();
+      const series = c ? GHG_PER[c] : GHG_REGIONAL;
+      const color = c ? CC[c] : '#2a9fd6';
+      const ctx = document.getElementById('ghg-canvas').getContext('2d');
+      const ds = ghgChart.data.datasets[0];
+      ds.data = [...series];
+      ds.borderColor = color;
+      ds.backgroundColor = grad(ctx, color, 220);
+      ghgChart.update({ duration: 600, easing: 'easeInOutQuart' });
+
+      const ann = GHG_ANN[c || 'Regional'] || GHG_ANN['Regional'];
+      const node = document.getElementById('ghg-insight');
+      node.style.borderLeftColor = color;
+      node.innerHTML = `<strong>${ann.year} &mdash; ${ann.text}</strong><em>${ann.sub}</em>`;
+    }
+
+    /* ══════════════════════════════════════════════════
+       SCATTER CHART — staggered dot reveal
+    ══════════════════════════════════════════════════ */
+    function initScatter() {
+      scatterChart = new Chart(document.getElementById('scatter-canvas').getContext('2d'), {
+        type: 'scatter',
+        data: {
+          datasets: SCATTER.map(d => ({
+            label: d.country,
+            data: [{ x: d.sst, y: d.rain }],
+            backgroundColor: CC[d.country] + 'b0',
+            borderColor: CC[d.country] + 'dd',
+            borderWidth: 0,
+            pointRadius: 0,
+            pointHoverRadius: 11,
+          })),
+        },
+        options: {
+          responsive: true,
+          animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...TT,
+              callbacks: {
+                title: ctx => ctx[0].dataset.label,
+                label: ctx => {
+                  const pt = ctx.dataset.data[0];
+                  return `SST +${pt.x}\u00b0C   Rain ${pt.y > 0 ? '+' : ''}${pt.y}mm`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: '#ebebeb', lineWidth: 0.7 },
+              border: { display: false },
+              ticks: { color: '#aaa', font: { size: 9.5 } },
+              title: { display: true, text: 'Sea Surface Temp. Anomaly (\u00b0C)', color: '#aaa', font: { size: 10 } },
+            },
+            y: {
+              grid: { color: c => c.tick.value === 0 ? '#ccc' : '#ebebeb', lineWidth: c => c.tick.value === 0 ? 1 : 0.7 },
+              border: { display: false },
+              ticks: { color: '#aaa', font: { size: 9.5 } },
+              title: { display: true, text: 'Rainfall Anomaly (mm)', color: '#aaa', font: { size: 10 } },
+            },
+          },
+          onClick: (_, els) => { if (els.length) toggleLock(SCATTER[els[0].datasetIndex].country); },
+          onHover: (_, els) => { hoverCountry = els.length ? SCATTER[els[0].datasetIndex].country : null; updateAll(); },
+        },
+      });
+
+      // Staggered dot reveal — cinematic timing
+      scatterChart.data.datasets.forEach((ds, i) => {
+        setTimeout(() => {
+          ds.pointRadius = 8;
+          scatterChart.update('none');
+        }, 80 + i * 100);
+      });
+    }
+
+    function updateScatter() {
+      if (!scatterChart) return;
+      const a = active();
+      scatterChart.data.datasets.forEach((ds, i) => {
+        const c = SCATTER[i].country;
+        if (!a || c === a) {
+          ds.pointRadius = c === a ? 13 : 8;
+          ds.backgroundColor = CC[c] + 'b0';
+          ds.borderWidth = 0;
+        } else {
+          ds.pointRadius = 5;
+          ds.backgroundColor = CC[c] + '22';
+          ds.borderWidth = 0;
+        }
+      });
+      scatterChart.update('none');
+    }
+
+    /* ══════════════════════════════════════════════════
+       SEA LEVEL CHART — SCROLL-DRIVEN PROGRESSIVE DRAW
+    ══════════════════════════════════════════════════ */
+    let seaScrollActive = false;
+    let seaInitDone = false;
+    let seaManualPlaying = false;
+
+    function initSea() {
+      const canvas = document.getElementById('sea-canvas');
+      const ctx = canvas.getContext('2d');
+      const colorHist = '#2a9fd6';
+      const colorFore = '#d45f3c';
+
+      const allYears = [...SEA_YEARS, ...SEA_FORECAST_YEARS];
+
+      seaChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: allYears,
+          datasets: [
+            {
+              label: 'Historical',
+              data: new Array(allYears.length).fill(null),
+              borderColor: colorHist,
+              borderWidth: 1.75,
+              backgroundColor: grad(ctx, colorHist, 240),
+              fill: true,
+              tension: 0.45,
+              pointRadius: 1,
+              pointHoverRadius: 5,
+              pointBackgroundColor: colorHist,
+              spanGaps: false,
+              segment: {
+                borderDash: ctx => ctx.p1DataIndex >= SEA_BASE.length ? [5, 4] : [],
+              },
+            },
+            {
+              label: 'Forecast',
+              data: new Array(allYears.length).fill(null),
+              borderColor: colorFore,
+              borderWidth: 1.5,
+              borderDash: [5, 4],
+              backgroundColor: 'transparent',
+              fill: false,
+              tension: 0.45,
+              pointRadius: 1,
+              pointHoverRadius: 4,
+              pointBackgroundColor: colorFore,
+              spanGaps: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          animation: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...TT,
+              callbacks: {
+                label: c => {
+                  if (c.raw == null) return null;
+                  return (c.raw >= 0 ? '+' : '') + Number(c.raw).toFixed(2) + ' mm' + (c.datasetIndex === 1 ? ' (proj.)' : '');
+                },
+                filter: c => c.raw != null,
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              border: { display: false },
+              ticks: { color: '#aaa', font: { size: 9.5 }, maxTicksLimit: 10 },
+            },
+            y: {
+              grid: { color: c => c.tick.value === 0 ? '#c0d8eb' : '#ebebeb', lineWidth: 0.7 },
+              border: { display: false },
+              ticks: { color: '#aaa', font: { size: 9.5 }, maxTicksLimit: 6 },
+            },
+          },
+        },
+      });
+
+      seaInitDone = true;
+      seaScrollActive = true;
+      // Show scroll hint
+      const hint = document.getElementById('sea-scroll-hint');
+      if (hint) hint.classList.add('show');
+      // Trigger initial scroll-linked draw
+      updateSeaFromScroll();
+    }
+
+    // Scroll-driven sea level: line grows as user scrolls through the section
+    function updateSeaFromScroll() {
+      if (!seaChart || !seaScrollActive || seaManualPlaying) return;
+
+      const section = document.getElementById('act3');
+      if (!section) return;
+      const canvas = document.getElementById('sea-canvas');
+      if (!canvas) return;
+
+      const canvasRect = canvas.getBoundingClientRect();
+      const vh = window.innerHeight;
+
+      // Progress: 0 when canvas top hits 90% of viewport, 1 when canvas bottom hits 30% of viewport
+      const startThreshold = vh * 0.92;
+      const endThreshold = vh * 0.2;
+      const range = startThreshold - endThreshold;
+      const canvasCenter = canvasRect.top + canvasRect.height * 0.5;
+      const progress = Math.max(0, Math.min(1, (startThreshold - canvasCenter) / range));
+
+      const c = active();
+      const histSeries = c ? SEA_PER[c] : SEA_BASE;
+      const color = c ? CC[c] : '#2a9fd6';
+      const totalHist = histSeries.length;
+      const totalFore = SEA_FORECAST.length;
+      const total = totalHist + totalFore;
+
+      // Map progress: 0–0.75 → historical, 0.75–1.0 → forecast
+      const histProgress = Math.min(1, progress / 0.72);
+      const foreProgress = Math.max(0, (progress - 0.72) / 0.28);
+
+      const histPoints = Math.round(histProgress * totalHist);
+      const forePoints = Math.round(foreProgress * totalFore);
+
+      const ds0 = seaChart.data.datasets[0];
+      const ds1 = seaChart.data.datasets[1];
+
+      // Update colors
+      ds0.borderColor = color;
+      const ctx = canvas.getContext('2d');
+      ds0.backgroundColor = grad(ctx, color, 240);
+
+      // Fill data
+      for (let i = 0; i < total; i++) {
+        ds0.data[i] = i < histPoints ? histSeries[Math.min(i, totalHist - 1)] : null;
+        ds1.data[i] = null;
+      }
+
+      // Forecast
+      if (forePoints > 0 && histPoints >= totalHist) {
+        ds1.data[totalHist - 1] = histSeries[totalHist - 1];
+        for (let j = 0; j < forePoints; j++) {
+          ds1.data[totalHist + j] = SEA_FORECAST[j];
+        }
+      }
+
+      seaChart.update('none');
+
+      // Hide scroll hint once fully drawn
+      const hint = document.getElementById('sea-scroll-hint');
+      if (hint && progress > 0.15) hint.classList.remove('show');
+    }
+
+    function updateSea() {
+      if (!seaChart) return;
+      // Re-sync scroll-linked draw with new country filter
+      if (seaScrollActive && !seaManualPlaying) {
+        updateSeaFromScroll();
+      }
+    }
+
+    // Replay button — time-based animation override
+    document.getElementById('play-btn').addEventListener('click', function () {
+      if (!seaChart || this.disabled) return;
+      this.disabled = true;
+      seaManualPlaying = true;
+      this.innerHTML = '<span style="display:inline-block;width:10px;height:10px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span> Playing&hellip;';
+      const btn = this;
+      const ds0 = seaChart.data.datasets[0];
+      const ds1 = seaChart.data.datasets[1];
+      const total = SEA_YEARS.length + SEA_FORECAST_YEARS.length;
+      ds0.data = new Array(total).fill(null);
+      ds1.data = new Array(total).fill(null);
+      seaChart.update('none');
+
+      const c = active();
+      const histSeries = c ? SEA_PER[c] : SEA_BASE;
+      const color = c ? CC[c] : '#2a9fd6';
+      ds0.borderColor = color;
+      const ctx = document.getElementById('sea-canvas').getContext('2d');
+      ds0.backgroundColor = grad(ctx, color, 240);
+
+      let i = 0;
+      function drawNext() {
+        if (i < histSeries.length) {
+          ds0.data[i] = histSeries[i];
+          seaChart.update('none');
+          i++;
+          setTimeout(drawNext, 55);
+        } else {
+          setTimeout(() => {
+            ds1.data[histSeries.length - 1] = histSeries[histSeries.length - 1];
+            let j = 0;
+            function drawForecast() {
+              if (j < SEA_FORECAST.length) {
+                ds1.data[histSeries.length + j] = SEA_FORECAST[j];
+                seaChart.update('none');
+                j++;
+                setTimeout(drawForecast, 110);
+              } else {
+                btn.disabled = false;
+                seaManualPlaying = false;
+                btn.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Replay time-lapse';
+              }
+            }
+            drawForecast();
+          }, 250);
+        }
+      }
+      drawNext();
+    });
+
+    /* ══════════════════════════════════════════════════
+       BAR CHARTS — grow upward with stagger
+    ══════════════════════════════════════════════════ */
+    function makeBar(id, data, color) {
+      const chart = new Chart(document.getElementById(id).getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: data.map(d => d.country),
+          datasets: [{
+            data: data.map(d => d.value),
+            backgroundColor: data.map(() => color + '99'),
+            borderWidth: 0,
+            borderRadius: 2,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          animation: {
+            duration: 1000,
+            easing: 'easeOutQuart',
+            delay: ctx => ctx.dataIndex * 50,
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...TT,
+              callbacks: {
+                title: ctx => ctx[0].label,
+                label: ctx => ctx.raw.toLocaleString() + (id.includes('disaster') ? 'K affected' : ' MW'),
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: '#ebebeb', lineWidth: 0.7 },
+              border: { display: false },
+              ticks: {
+                color: '#aaa', font: { size: 9.5 },
+                callback: v => v >= 1000 ? (v / 1000) + 'K' : v,
+              },
+            },
+            y: {
+              grid: { display: false },
+              border: { display: false },
+              ticks: { color: '#555', font: { size: 10 } },
+            },
+          },
+          onClick: (_, els) => { if (els.length) toggleLock(data[els[0].index].country); },
+          onHover: (_, els) => { hoverCountry = els.length ? data[els[0].index].country : null; updateAll(); },
+        },
+      });
+      return { chart, data, color };
+    }
+
+    function updateBar(ref) {
+      if (!ref) return;
+      const a = active();
+      const ds = ref.chart.data.datasets[0];
+      ds.backgroundColor = ref.data.map(d =>
+        !a || d.country === a ? ref.color + '99' : ref.color + '18'
+      );
+      ref.chart.update('none');
+    }
+
+    /* ══════════════════════════════════════════════════
+       MASTER UPDATE
+    ══════════════════════════════════════════════════ */
+    function updateAll() {
+      updateMapVisuals();
+      updateLegend();
+      updateGHG();
+      updateScatter();
+      updateSea();
+      updateBar(disRef);
+      updateBar(dis2Ref);
+      updateBar(renRef);
+    }
+
+    /* ══════════════════════════════════════════════════
+       BOOT
+    ══════════════════════════════════════════════════ */
+    checkMapReveal();
+    updateDots();
+    onScroll();
+  </script>
+</body>
+
+</html>
